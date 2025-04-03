@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>ACCUTE</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-[#192439] text-white">
+  <!-- 전체 컨테이너 폭을 70%로 제한 -->
+  <div class="w-[70%] mx-auto p-6">
+    <!-- 헤더 영역 -->
+    <div class="text-center mb-6">
+      <h1 class="text-4xl font-extrabold mb-1">ACCUTE</h1>
+      <p class="text-sm text-gray-300 mb-2">Accounting Compliance Cognitive Understanding Task Engine</p>
+      <p class="text-sm text-gray-400">우리는 용감한 오남매</p>
+    </div>
+
+    <!-- 입력 폼 영역 -->
+    <form id="agiForm" class="bg-[#2D3B56] shadow-md rounded px-8 pt-6 pb-8 mb-6" enctype="multipart/form-data">
+      <!-- 사용자 요청 입력 -->
+      <div class="mb-4">
+        <label for="taskPrompt" class="block text-gray-100 text-sm font-semibold mb-2">요청 사항을 입력해주세요</label>
+        <input 
+          type="text" 
+          id="taskPrompt" 
+          name="task_prompt"
+          placeholder="예: 유사한 회계 보고서 찾아줘" 
+          class="shadow appearance-none border border-gray-300 rounded w-full py-2 px-3 bg-gray-50 text-gray-900 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400"
+          required
+        >
+      </div>
+      <!-- PDF 파일 업로드 -->
+      <div class="mb-4">
+        <label for="pdfFile" class="block text-gray-100 text-sm font-semibold mb-2">사업 보고서 PDF를 업로드해주세요</label>
+        <input 
+          type="file" 
+          id="pdfFile" 
+          name="pdf_file"
+          accept="application/pdf"
+          class="w-full text-gray-900 bg-gray-50 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-400"
+          required
+        >
+      </div>
+      <!-- 제출 버튼 -->
+      <div class="flex items-center justify-center">
+        <button 
+          type="submit"
+          class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline"
+        >
+          실행하기
+        </button>
+      </div>
+    </form>
+
+    <!-- 결과 출력 영역 (가로 2열 레이아웃) -->
+    <div id="result" class="flex flex-col md:flex-row md:space-x-4">
+      <!-- Summary 영역 -->
+      <div class="flex-1 mb-4 md:mb-0 bg-white/90 text-gray-800 shadow-md rounded px-6 py-4">
+        <h2 class="text-2xl font-bold mb-4">Summary</h2>
+        <pre id="summaryText" class="whitespace-pre-wrap"></pre>
+      </div>
+      <!-- Similar Case 영역 -->
+      <div class="flex-1 bg-white/90 text-gray-800 shadow-md rounded px-6 py-4">
+        <h2 class="text-2xl font-bold mb-4">Similar Case</h2>
+        <pre id="similarText" class="whitespace-pre-wrap"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- API 호출 스크립트 -->
+  <script>
+    document.getElementById("agiForm").addEventListener("submit", async function(e) {
+      e.preventDefault();
+      
+      const taskPrompt = document.getElementById("taskPrompt").value;
+      
+      const pdfFile = document.getElementById("pdfFile").files[0];
+      
+      if (!taskPrompt || !pdfFile) {
+        alert("⚠️ 사용자 요청과 PDF 파일을 모두 입력해 주세요.");
+        return;
+      }
+      
+      document.getElementById("summaryText").innerText = "Processing summary...";
+      document.getElementById("similarText").innerText = "Processing similar case...";
+      
+      const formData = new FormData();
+      formData.append("task_prompt", taskPrompt);
+      formData.append("pdf_file", pdfFile);
+      
+      try {
+        const response = await fetch("/api/agi", {
+          method: "POST",
+          body: formData
+        });
+        const data = await response.json();
+        
+        // Summary에서 {} 제거 (단순 치환)
+        let cleanedSummary = data.summary || "";
+        cleanedSummary = cleanedSummary.replace(/[{}]/g, "");
+        
+        document.getElementById("summaryText").innerText = cleanedSummary;
+        document.getElementById("similarText").innerText = data.similar_case || "";
+      } catch (error) {
+        console.error("Error:", error);
+        document.getElementById("summaryText").innerText = "요청 처리 중 에러가 발생했습니다.";
+        document.getElementById("similarText").innerText = "";
+      }
+    });
+  </script>
+</body>
+</html>
