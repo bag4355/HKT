@@ -10,6 +10,12 @@ from openai import OpenAI
 import re
 import os
 
+upstage_api_key = os.environ.get('upstage_api_key')
+cohere_api_key = os.environ.get('cohere_api_key')
+qdrant_api_key = os.environ.get('qdrant_api_key')
+qdrant_host = os.environ.get('qdrant_host')
+COLLECTION_NAME = os.environ.get('COLLECTION_NAME')
+
 workbook = openpyxl.load_workbook('crawled_data.xlsx')  # Korea Accounting Law Data
 sheet = workbook.active
 
