@@ -161,7 +161,7 @@ def classify_task_with_llm(task_prompt: str) -> str:
         stream=False
     )
     classification = response.choices[0].message.content.strip()
-    if classification not in ["1", "2"]:
+    if classification not in ["YES"]:
         classification = "None"
     return classification
 
