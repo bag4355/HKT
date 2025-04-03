@@ -141,15 +141,16 @@ def summarize_pdf_fully(pdf_path: str) -> str: #full pipeline
 # RAG AGI pipeline
 def classify_task_with_llm(task_prompt: str) -> str:
     classification_prompt = f"""
-우리가 처리할 수 있는 TASK는 오직 한 가지입니다:
+우리가 처리할 수 있는 TASK는 아래 두 가지입니다:
 
-"유사한 다른 회계 사업보고서 검색"
+1) "유사한 다른 회계 사업보고서 검색"
+2) "입력 회계 사업보고서에서 사용된 법 찾아주기"
 
 사용자의 요청: {task_prompt}
 
-"YES" 또는 "None"으로만 대답하세요.
-- "유사한 다른 회계 사업보고서 검색"에 해당된다면, "YES"로 대답하세요.
-- "유사한 다른 회계 사업보고서 검색"에 해당되지 않는다면, "None"이라고 답하세요.
+위 요청이 1번, 2번 중 어디에 가장 잘 해당하나요?
+- 1 or 2 로만 답하세요.
+- 둘 다 아니면 "None"이라고만 답하세요.
 """
     response = llm_client.chat.completions.create(
         model="solar-pro",
@@ -296,18 +297,63 @@ def postprocess_final_answer_with_company_name(final_answer: str, reranked_candi
 
 def rag_based_agi_pipeline(task_prompt: str, report_1: str, report_2: str = "") -> str:
     task_type = classify_task_with_llm(task_prompt)
-    if task_type == "YES":
+    if task_type == "1":
         query = "유사한 회계 사업보고서 찾기"
         query_vector = get_solar_embedding(query)
         reranked_candidates = search_and_rerank_with_indexing(qdrant_client, co, query_vector, COLLECTION_NAME)
         top_contexts = [item["payload"]["text"] for item in reranked_candidates[:3]]
         final_answer = generate_final_answer_with_llm(query, top_contexts)
 
+        # 회사명 후처리
         final_answer = postprocess_final_answer_with_company_name(final_answer, reranked_candidates)
 
+        # ====== 여기서 {} 제거 로직 추가 ======
+        # "Similar Case"에서 { }만 없애기
         final_answer = re.sub(r"[{}]", "", final_answer)
 
         return final_answer
 
+    elif task_type == "2":
+        combined_reports = f"[보고서1]\n{report_1}\n\n[보고서2]\n{report_2}"
+        system_prompt = (
+            "당신은 K-IFRS 및 회계기준 전문 어시스턴트입니다. "
+            "다음은 2개의 회계 사업보고서입니다. "
+            "각 보고서에서 실제로 언급된 회계기준서(K-IFRS)와 법령을 식별하고, 그 내용을 정리해 주세요.\n\n"
+            "⚠️ 지침:\n"
+            "- 실제 보고서에 명시적으로 언급된 기준서 또는 법령만 포함해 주세요.\n"
+            "- 기준서는 '기업회계기준서 제XXXX호'처럼 표기된 항목만 추출합니다.\n"
+            "- 법령은 '법', '시행령', '규정' 등의 정식 명칭으로 식별합니다.\n"
+            "- 관련 기준/법령이 언급된 문장은 최대 5개까지 포함해 주세요.\n"
+            "- 출력은 반드시 JSON 형식으로만 반환하며, 다른 설명은 포함하지 마세요."
+        )
+        user_prompt = f"""
+[보고서 1]
+{report_1}
+
+[보고서 2]
+{report_2}
+
+요청: 위 두 보고서를 기반으로 아래 JSON 형식에 맞게 회계기준서 및 법령 정보를 정리하세요.
+
+json
+{{
+    "회계기준서_적용": [ ... ],
+    "관련_법령": [ ... ],
+    "회계기준_관련_문장": [ ... ]
+}}
+"""
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        response = llm_client.chat.completions.create(
+            model="solar-pro",
+            messages=messages,
+            stream=False
+        )
+        # {} 제거
+        final_answer = response.choices[0].message.content
+        final_answer = re.sub(r"[{}]", "", final_answer)
+        return final_answer
     else:
         return "요청한 TASK를 수행할 수 없습니다."
