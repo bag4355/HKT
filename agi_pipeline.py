@@ -8,6 +8,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models as qdrant_models
 from openai import OpenAI  # openai==1.52.2
 import re
+import os
 
 # ===================== 0. 설정 =====================
 # (OpenAI, Cohere, Qdrant 등 각종 키와 호스트 정보는 실제 값으로 교체해 주세요.)
