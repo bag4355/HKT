@@ -6,28 +6,19 @@ from typing import List
 import cohere
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qdrant_models
-from openai import OpenAI  # openai==1.52.2
+from openai import OpenAI
 import re
 import os
 
-# ===================== 0. 설정 =====================
-# (OpenAI, Cohere, Qdrant 등 각종 키와 호스트 정보는 실제 값으로 교체해 주세요.)
-upstage_api_key = "up_6qo5o2ZeW3LLhCxybWXDjdUAeIHtC"
-cohere_api_key = "WwcsB55oeO2h9mdBruglQe6chqNYmICur98HPmET"
-qdrant_api_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.wZ2KnWo8fU2lisqUxP2t0RVO2eKVgUzPenwImNtkUXg"
-qdrant_host = "a083dbb5-2a05-4572-a44c-85ce96be6123.us-east4-0.gcp.cloud.qdrant.io"
-COLLECTION_NAME = "please_work"
-
-# ===================== 0-1. 엑셀 처리 (예시) =====================
-workbook = openpyxl.load_workbook('crawled_data.xlsx')  # 파일명, 경로 조정
-sheet = workbook.active  # 혹은 workbook['시트명']
+workbook = openpyxl.load_workbook('crawled_data.xlsx')  # Korea Accounting Law Data
+sheet = workbook.active
 
 law_list = []
 for cell in sheet['C']:
     value = str(cell.value) if cell.value is not None else ""
     law_list.append(value)
 
-# ===================== 0-2. 클라이언트 세팅 =====================
+
 os.environ.pop("HTTP_PROXY", None)
 os.environ.pop("HTTPS_PROXY", None)
 
@@ -43,7 +34,7 @@ qdrant_client = QdrantClient(
     api_key=qdrant_api_key
 )
 
-# ===================== 1. PDF 텍스트 추출 =====================
+
 def extract_text_from_pdf(pdf_path: str) -> str:
     reader = PdfReader(pdf_path)
     text = ""
@@ -53,11 +44,11 @@ def extract_text_from_pdf(pdf_path: str) -> str:
             text += page_text + "\n"
     return text
 
-# ===================== 2. 텍스트 분할 (기본: 8,000자) =====================
+
 def split_text_by_length(text: str, chunk_size: int = 8000) -> list:
     return [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
 
-# ===================== 3. 개별 chunk 요약 함수 =====================
+
 def summarize_chunk(chunk: str) -> str:
     prompt = f"""다음은 회계 사업보고서의 일부입니다.
 
@@ -105,7 +96,7 @@ def summarize_chunk(chunk: str) -> str:
         print(f"[요약 실패] {e}")
         return "[요약 실패]"
 
-# ===================== 4. 병렬 요약 처리 =====================
+
 def summarize_in_chunks_parallel(text: str, max_workers: int = 6) -> list:
     chunks = split_text_by_length(text)
     print(f"[⚡] {len(chunks)}개의 chunk를 병렬로 요약 중...")
@@ -113,7 +104,7 @@ def summarize_in_chunks_parallel(text: str, max_workers: int = 6) -> list:
         summaries = list(executor.map(summarize_chunk, chunks))
     return summaries
 
-# ===================== 5. 통합 요약 =====================
+
 def merge_summaries(summaries: list) -> str:
     combined = "\n\n".join(summaries)
     prompt = f"""다음은 회계 보고서를 나눠서 요약한 내용입니다. 이들을 하나의 최종 요약으로 통합해 주세요:\n\n{combined}"""
@@ -131,8 +122,8 @@ def merge_summaries(summaries: list) -> str:
         print(f"[통합 요약 실패] {e}")
         return "[통합 요약 실패]"
 
-# ===================== 6. 전체 파이프라인 함수 =====================
-def summarize_pdf_fully(pdf_path: str) -> str:
+
+def summarize_pdf_fully(pdf_path: str) -> str: #full pipeline
     print(f"[📄] PDF 텍스트 추출 중: {pdf_path}")
     raw_text = extract_text_from_pdf(pdf_path)
     print(f"[✂️] 텍스트 분할 + 병렬 요약 중...")
@@ -141,19 +132,18 @@ def summarize_pdf_fully(pdf_path: str) -> str:
     final_summary = merge_summaries(chunk_summaries)
     return final_summary
 
-# ===================== 7. RAG AGI 예시 파이프라인 (TASK 분류 & 처리) =====================
+# RAG AGI pipeline
 def classify_task_with_llm(task_prompt: str) -> str:
     classification_prompt = f"""
-우리가 처리할 수 있는 TASK는 아래 두 가지입니다:
+우리가 처리할 수 있는 TASK는 오직 한 가지입니다:
 
-1) "유사한 다른 회계 사업보고서 검색"
-2) "입력 회계 사업보고서에서 사용된 법 찾아주기"
+"유사한 다른 회계 사업보고서 검색"
 
 사용자의 요청: {task_prompt}
 
-위 요청이 1번, 2번 중 어디에 가장 잘 해당하나요?
-- 1 or 2 로만 답하세요.
-- 둘 다 아니면 "None"이라고만 답하세요.
+1 또는 "None"으로만 대답하세요.
+- 위 요청에 해당된다면, 1로 대답하세요.
+- 아니라면 "None"이라고만 답하세요.
 """
     response = llm_client.chat.completions.create(
         model="solar-pro",
@@ -225,7 +215,7 @@ def retrieve_by_report_index(report_index: int, reranked_candidates, qdrant_clie
     retrieved_docs = retrieve_qdrant_docs_by_ids(qdrant_client, collection_name, [qdrant_id])
     for doc in retrieved_docs:
         print(f"[역추적 결과] ID={doc.id}, payload={doc.payload}")
-        return doc  # 첫 번째 doc만 반환
+        return doc
     return None
 
 def get_solar_embedding(text: str) -> List[float]:
@@ -282,19 +272,16 @@ def postprocess_final_answer_with_company_name(final_answer: str, reranked_candi
     """
     try:
         parsed = json.loads(final_answer)
-        report_id = parsed.get("유사한_보고서_ID", "")  # "보고서 3"
+        report_id = parsed.get("유사한_보고서_ID", "")
         if report_id.startswith("보고서 "):
             report_index = int(report_id.replace("보고서 ", ""))
             for c in reranked_candidates:
                 if c["report_index"] == report_index:
-                    # filename에서 [탈로스]사업보고서(2025.03.21) 부분만 추출
                     fname = c["payload"].get("filename", "")
-                    # 정규표현식으로 [탈로스]사업보고서(2025.03.21)만 추출
                     match = re.search(r"^(\[.*?\].*?\(\d{4}\.\d{2}\.\d{2}\))", fname)
                     if match:
                         extracted = match.group(1)
                         parsed["유사한_보고서_ID"] = extracted
-                        # JSON 직렬화
                         final_answer = json.dumps(parsed, ensure_ascii=False)
                         break
     except Exception as e:
@@ -310,56 +297,11 @@ def rag_based_agi_pipeline(task_prompt: str, report_1: str, report_2: str = "") 
         top_contexts = [item["payload"]["text"] for item in reranked_candidates[:3]]
         final_answer = generate_final_answer_with_llm(query, top_contexts)
 
-        # 회사명 후처리
         final_answer = postprocess_final_answer_with_company_name(final_answer, reranked_candidates)
 
-        # ====== 여기서 {} 제거 로직 추가 ======
-        # "Similar Case"에서 { }만 없애기
         final_answer = re.sub(r"[{}]", "", final_answer)
 
         return final_answer
 
-    elif task_type == "2":
-        combined_reports = f"[보고서1]\n{report_1}\n\n[보고서2]\n{report_2}"
-        system_prompt = (
-            "당신은 K-IFRS 및 회계기준 전문 어시스턴트입니다. "
-            "다음은 2개의 회계 사업보고서입니다. "
-            "각 보고서에서 실제로 언급된 회계기준서(K-IFRS)와 법령을 식별하고, 그 내용을 정리해 주세요.\n\n"
-            "⚠️ 지침:\n"
-            "- 실제 보고서에 명시적으로 언급된 기준서 또는 법령만 포함해 주세요.\n"
-            "- 기준서는 '기업회계기준서 제XXXX호'처럼 표기된 항목만 추출합니다.\n"
-            "- 법령은 '법', '시행령', '규정' 등의 정식 명칭으로 식별합니다.\n"
-            "- 관련 기준/법령이 언급된 문장은 최대 5개까지 포함해 주세요.\n"
-            "- 출력은 반드시 JSON 형식으로만 반환하며, 다른 설명은 포함하지 마세요."
-        )
-        user_prompt = f"""
-[보고서 1]
-{report_1}
-
-[보고서 2]
-{report_2}
-
-요청: 위 두 보고서를 기반으로 아래 JSON 형식에 맞게 회계기준서 및 법령 정보를 정리하세요.
-
-json
-{{
-    "회계기준서_적용": [ ... ],
-    "관련_법령": [ ... ],
-    "회계기준_관련_문장": [ ... ]
-}}
-"""
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ]
-        response = llm_client.chat.completions.create(
-            model="solar-pro",
-            messages=messages,
-            stream=False
-        )
-        # {} 제거
-        final_answer = response.choices[0].message.content
-        final_answer = re.sub(r"[{}]", "", final_answer)
-        return final_answer
     else:
         return "요청한 TASK를 수행할 수 없습니다."
