@@ -147,9 +147,9 @@ def classify_task_with_llm(task_prompt: str) -> str:
 
 사용자의 요청: {task_prompt}
 
-1 또는 "None"으로만 대답하세요.
-- 위 요청에 해당된다면, 1로 대답하세요.
-- 아니라면 "None"이라고만 답하세요.
+"YES" 또는 "None"으로만 대답하세요.
+- "유사한 다른 회계 사업보고서 검색"에 해당된다면, "YES"로 대답하세요.
+- "유사한 다른 회계 사업보고서 검색"에 해당되지 않는다면, "None"이라고 답하세요.
 """
     response = llm_client.chat.completions.create(
         model="solar-pro",
@@ -296,7 +296,7 @@ def postprocess_final_answer_with_company_name(final_answer: str, reranked_candi
 
 def rag_based_agi_pipeline(task_prompt: str, report_1: str, report_2: str = "") -> str:
     task_type = classify_task_with_llm(task_prompt)
-    if task_type == "1":
+    if task_type == "YES":
         query = "유사한 회계 사업보고서 찾기"
         query_vector = get_solar_embedding(query)
         reranked_candidates = search_and_rerank_with_indexing(qdrant_client, co, query_vector, COLLECTION_NAME)
