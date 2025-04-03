@@ -27,6 +27,9 @@ for cell in sheet['C']:
     law_list.append(value)
 
 # ===================== 0-2. 클라이언트 세팅 =====================
+os.environ.pop("HTTP_PROXY", None)
+os.environ.pop("HTTPS_PROXY", None)
+
 llm_client = OpenAI(
     api_key=upstage_api_key,
     base_url="https://api.upstage.ai/v1"
