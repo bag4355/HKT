@@ -1,7 +1,7 @@
 openpyxl==3.1.5
 PyPDF2==3.0.1
 cohere==5.14.2
-openai==1.52.2
+openai
 flask==3.0.3
 werkzeug==3.0.3
 qdrant_client
